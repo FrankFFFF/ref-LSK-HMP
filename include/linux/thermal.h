@@ -57,6 +57,8 @@
 #define DEFAULT_THERMAL_GOVERNOR       "fair_share"
 #elif defined(CONFIG_THERMAL_DEFAULT_GOV_USER_SPACE)
 #define DEFAULT_THERMAL_GOVERNOR       "user_space"
+#elif defined(CONFIG_THERMAL_DEFAULT_GOV_POWER_ALLOCATOR)
+#define DEFAULT_THERMAL_GOVERNOR       "power_allocator"
 #endif
 
 struct thermal_zone_device;
@@ -251,9 +253,14 @@ struct thermal_bind_params {
 
 	/*
 	 * This is a measure of 'how effectively these devices can
-	 * cool 'this' thermal zone. The shall be determined by platform
-	 * characterization. This is on a 'percentage' scale.
-	 * See Documentation/thermal/sysfs-api.txt for more information.
+	 * cool 'this' thermal zone. The shall be determined by
+	 * platform characterization. For the fair-share governor,
+	 * this is on a 'percentage' scale.  See
+	 * Documentation/thermal/sysfs-api.txt for more
+	 * information. For the power_allocator governor, they are
+	 * relative to each other, see
+	 * Documentation/thermal/power_allocator.txt for more
+	 * information.
 	 */
 	int weight;
 
@@ -280,6 +287,33 @@ struct thermal_zone_params {
 
 	int num_tbps;	/* Number of tbp entries */
 	struct thermal_bind_params *tbp;
+
+	/*
+	 * Sustainable power (heat) that this thermal zone can dissipate in
+	 * mW
+	 */
+	u32 sustainable_power;
+
+	/*
+	 * Proportional parameter of the PID controller when
+	 * overshooting (i.e., when temperature is below the target)
+	 */
+	s32 k_po;
+
+	/*
+	 * Proportional parameter of the PID controller when
+	 * undershooting
+	 */
+	s32 k_pu;
+
+	/* Integral parameter of the PID controller */
+	s32 k_i;
+
+	/* Derivative parameter of the PID controller */
+	s32 k_d;
+
+	/* threshold below which the error is no longer accumulated */
+	s32 integral_cutoff;
 };
 
 struct thermal_genl_event {
