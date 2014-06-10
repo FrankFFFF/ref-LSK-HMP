@@ -10,6 +10,10 @@
 #define SOC_SENSOR "SENSOR_TEMP_SOC"
 
 #define NUM_CLUSTERS 2
+enum cluster_type {
+	CLUSTER_BIG = 0,
+	CLUSTER_LITTLE
+};
 
 struct scpi_sensor {
 	u16 sensor_id;
@@ -19,6 +23,22 @@ struct scpi_sensor {
 };
 
 struct scpi_sensor scpi_temp_sensor;
+
+static int get_dyn_power_coeff(enum cluster_type cluster)
+{
+	int coeff = 0;
+
+	switch(cluster) {
+	case CLUSTER_BIG:
+		coeff = 530;
+		break;
+	case CLUSTER_LITTLE:
+		coeff = 140;
+		break;
+	}
+
+	return coeff;
+}
 
 static int get_temp_value(void *data, long *temp)
 {
@@ -61,6 +81,8 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 
 	for (i = 0; i < NUM_CLUSTERS; i++) {
 		char node[16];
+		enum cluster_type cluster =
+			topology_physical_package_id(cpumask_any(&sensor_data->cluster[i]));
 
 		snprintf(node, 16, "cluster%d", i);
 		np = of_find_node_by_name(NULL, node);
@@ -69,8 +91,10 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 			dev_info(&pdev->dev, "Node not found: %s\n", node);
 
 		sensor_data->cdevs[i] =
-			of_cpufreq_cooling_register(np,
-						&sensor_data->cluster[i]);
+			of_cpufreq_power_cooling_register(np,
+						&sensor_data->cluster[i],
+						get_dyn_power_coeff(cluster),
+						NULL);
 
 		if (IS_ERR(sensor_data->cdevs[i]))
 			dev_warn(&pdev->dev,
