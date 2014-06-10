@@ -21,7 +21,7 @@
 
 #include <linux/dma-mapping.h>
 #ifdef CONFIG_SYNC
-#include <linux/sync.h>
+#include "../../../staging/android/sync.h"
 #include <linux/syscalls.h>
 #include "mali_kbase_sync.h"
 #endif
