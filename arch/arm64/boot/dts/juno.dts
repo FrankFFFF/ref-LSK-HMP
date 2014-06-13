@@ -23,52 +23,116 @@
 		#address-cells = <2>;
 		#size-cells = <0>;
 
-		cpu@100 {
+		cpu-map {
+			cluster1 {
+				core0 {
+					cpu = <&CPU0>;
+				};
+				core1 {
+					cpu = <&CPU1>;
+				};
+				core2 {
+					cpu = <&CPU2>;
+				};
+				core3 {
+					cpu = <&CPU3>;
+				};
+			};
+
+			cluster0 {
+				core0 {
+					cpu = <&CPU4>;
+				};
+				core1 {
+					cpu = <&CPU5>;
+				};
+			};
+		};
+
+		idle-states {
+			entry-method = "arm,psci";
+
+			CPU_SLEEP_0: cpu-sleep-0 {
+				compatible = "arm,idle-state";
+				entry-method-param = <0x0010000>;
+				entry-latency-us = <40>;
+				exit-latency-us = <100>;
+				min-residency-us = <150>;
+			};
+
+			CLUSTER_SLEEP_0: cluster-sleep-0 {
+				compatible = "arm,idle-state";
+				entry-method-param = <0x1010000>;
+				entry-latency-us = <500>;
+				exit-latency-us = <1000>;
+				min-residency-us = <2500>;
+			};
+		};
+
+		CPU0:cpu@100 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53","arm,armv8";
 			reg = <0x0 0x100>;
 			enable-method = "psci";
+			clocks = <&scpi_dvfs 1>;
+			clock-names = "vlittle";
+			/* cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>; */
 		};
 
-		cpu@101 {
+		CPU1:cpu@101 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53","arm,armv8";
 			reg = <0x0 0x101>;
 			enable-method = "psci";
+			clocks = <&scpi_dvfs 1>;
+			clock-names = "vlittle";
+			/* cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>; */
 		};
 
-		cpu@102 {
+		CPU2:cpu@102 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53","arm,armv8";
 			reg = <0x0 0x102>;
 			enable-method = "psci";
+			clocks = <&scpi_dvfs 1>;
+			clock-names = "vlittle";
+			/* cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>; */
 		};
 
-		cpu@103 {
+		CPU3:cpu@103 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53","arm,armv8";
 			reg = <0x0 0x103>;
 			enable-method = "psci";
+			clocks = <&scpi_dvfs 1>;
+			clock-names = "vlittle";
+			/* cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>; */
 		};
 
-		cpu@0 {
+		CPU4:cpu@0 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57","arm,armv8";
 			reg = <0x0 0x0>;
 			enable-method = "psci";
+			clocks = <&scpi_dvfs 0>;
+			clock-names = "vbig";
+			/* cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>; */
 		};
 
-		cpu@1 {
+		CPU5:cpu@1 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57","arm,armv8";
 			reg = <0x0 0x1>;
 			enable-method = "psci";
+			clocks = <&scpi_dvfs 0>;
+			clock-names = "vbig";
+			/* cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>; */
 		};
 	};
 
 	memory@80000000 {
 		device_type = "memory";
-		reg = <0x00000000 0x80000000 0x0 0x80000000>,
+		reg = <0x00000000 0x80000000 0x0 0x7f000000>,
 		      <0x00000008 0x80000000 0x1 0x80000000>;
 	};
 
@@ -105,12 +169,28 @@
 			     <GIC_PPI 10 0xff01>;
 	};
 
+	timer@2a810000 {
+		compatible = "arm,armv7-timer-mem";
+		reg = <0x0 0x2a810000 0x0 0x10000>;
+		clock-frequency = <100000000>;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		frame@2a830000 {
+			frame-number = <1>;
+			interrupts = <0 60 4>;
+			reg = <0x0 0x2a830000 0x0 0x10000>;
+		};
+	};
+
 	pmu {
 		compatible = "arm,armv8-pmuv3";
-		interrupts = <GIC_SPI 60 4>,
-			     <GIC_SPI 61 4>,
-			     <GIC_SPI 62 4>,
-			     <GIC_SPI 63 4>;
+		interrupts = <GIC_SPI 18 4>,
+			     <GIC_SPI 22 4>,
+			     <GIC_SPI 26 4>,
+			     <GIC_SPI 30 4>,
+			     <GIC_SPI 02 4>,
+			     <GIC_SPI 06 4>;
 	};
 
 	psci {
@@ -142,31 +222,36 @@
 				 0 0 0 4 &gic 0 139 4>;
 	};
 
-	scpi: scpi@2b1f0000 {
-		compatible = "arm,scpi-mhu";
+	scpi: mhu@2b1f0000 {
+		compatible = "arm,mhu";
 		reg = <0x0 0x2b1f0000 0x0 0x10000>,   /* MHU registers */
 		      <0x0 0x2e000000 0x0 0x10000>;   /* Payload area */
 		interrupts = <0 36 4>,   /* low priority interrupt */
-			     <0 35 4>,   /* high priority interrupt */
-			     <0 37 4>;   /* secure channel interrupt */
-		#clock-cells = <1>;
-		clock-output-names = "a57", "a53", "gpu", "hdlcd0", "hdlcd1";
+			     <0 35 4>;   /* high priority interrupt */
 	};
 
-	hdlcd0_osc: scpi_osc@3 {
-		compatible = "arm,scpi-osc";
-		#clock-cells = <0>;
-		clocks = <&scpi 3>;
-		frequency-range = <23000000 210000000>;
-		clock-output-names = "pxlclk0";
+	clocks {
+		compatible = "arm,scpi-clks";
+
+		scpi_dvfs: scpi_clocks@0 {
+			compatible = "arm,scpi-clk-indexed";
+			#clock-cells = <1>;
+			clock-indices = <0>, <1>, <2>;
+			clock-output-names = "vbig", "vlittle", "vgpu";
+		};
+
+		scpi_clk: scpi_clocks@3 {
+			compatible = "arm,scpi-clk-range";
+			#clock-cells = <1>;
+			clock-indices = <3>, <4>;
+			frequency-range = <23000000 210000000>;
+			clock-output-names = "pxlclk0", "pxlclk1";
+		};
+
 	};
 
-	hdlcd1_osc: scpi_osc@4 {
-		compatible = "arm,scpi-osc";
-		#clock-cells = <0>;
-		clocks = <&scpi 4>;
-		frequency-range = <23000000 210000000>;
-		clock-output-names = "pxlclk1";
+	cpufreq {
+		compatible = "arm,scpi-cpufreq";
 	};
 
 	soc_uartclk: refclk72738khz {
@@ -335,7 +420,7 @@
 		compatible = "arm,hdlcd";
 		reg = <0 0x7ff60000 0 0x1000>;
 		interrupts = <0 85 4>;
-		clocks = <&hdlcd0_osc>;
+		clocks = <&scpi_clk 0>;
 		clock-names = "pxlclk";
 		i2c-slave = <&dvi0>;
 
@@ -360,7 +445,7 @@
 		compatible = "arm,hdlcd";
 		reg = <0 0x7ff50000 0 0x1000>;
 		interrupts = <0 93 4>;
-		clocks = <&hdlcd1_osc>;
+		clocks = <&scpi_clk 1>;
 		clock-names = "pxlclk";
 		i2c-slave = <&dvi1>;
 
@@ -379,6 +464,13 @@
 				vsync-len = <6>;
 			};
 		};
+	};
+
+	gpu@0xfc010000 {
+		compatible = "arm,malit6xx", "arm,mali";
+		reg = <0x0 0x2d000000 0x0 0x10000>;
+		interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
+		interrupt-names = "JOB", "MMU", "GPU";
 	};
 
 	smb {
