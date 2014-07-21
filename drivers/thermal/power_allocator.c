@@ -15,6 +15,7 @@
 
 #define pr_fmt(fmt) "Power allocator: " fmt
 
+#include <linux/debugfs.h>
 #include <linux/rculist.h>
 #include <linux/slab.h>
 #include <linux/thermal.h>
@@ -61,15 +62,25 @@ enum power_allocator_trip_levels {
  * @prev_err:	error in the previous iteration of the PID controller.
  *		Used to calculate the derivative term.
  */
+#define power_allocator_param_s32(name)	\
+	s32 name;			\
+	struct dentry *name##_dentry;
+
+#define power_allocator_param_s64(name)	\
+	s64 name;			\
+	struct dentry *name##_dentry;
+
 struct power_allocator_params {
-	s32 k_po;
-	s32 k_pu;
-	s32 k_i;
-	s32 k_d;
-	s32 integral_cutoff;
-	s64 err_integral;
-	s32 prev_err;
+	power_allocator_param_s32(k_po);
+	power_allocator_param_s32(k_pu);
+	power_allocator_param_s32(k_i);
+	power_allocator_param_s32(k_d);
+	power_allocator_param_s32(integral_cutoff);
+	power_allocator_param_s64(err_integral);
+	power_allocator_param_s32(prev_err);
 };
+
+#undef power_allocator_param
 
 /**
  * get_actor_weight() - get the weight for the power actor
@@ -389,6 +400,45 @@ static void allow_maximum_power(struct thermal_zone_device *tz)
 	}
 }
 
+struct dentry *power_allocator_d;
+
+#define debugfs_entry(type, name)					\
+	params->name##_dentry = debugfs_create_##type( #name, S_IWUSR | S_IRUGO, power_allocator_d, &params->name); \
+	if (IS_ERR_OR_NULL(params->name##_dentry)) {					\
+		pr_warn("Unable to create debugfsfile: " #name "\n"); \
+		return; \
+	}
+
+#define debugfs_entry_u32(name) \
+	debugfs_entry(u32, name)
+
+#define debugfs_entry_u64(name) \
+	debugfs_entry(u64, name)
+
+static void create_debugfs_pi_params(struct power_allocator_params *params)
+{
+	debugfs_entry_u32(k_po);
+	debugfs_entry_u32(k_pu);
+	debugfs_entry_u32(k_i);
+	debugfs_entry_u32(k_d);
+	debugfs_entry_u32(integral_cutoff);
+	debugfs_entry_u64(err_integral);
+	debugfs_entry_u32(prev_err);
+}
+
+#undef debugfs_entry
+
+static void delete_debugfs_pi_params(struct power_allocator_params *params)
+{
+	debugfs_remove(params->k_po_dentry);
+	debugfs_remove(params->k_pu_dentry);
+	debugfs_remove(params->k_i_dentry);
+	debugfs_remove(params->k_d_dentry);
+	debugfs_remove(params->integral_cutoff_dentry);
+	debugfs_remove(params->err_integral_dentry);
+	debugfs_remove(params->prev_err_dentry);
+}
+
 /**
  * power_allocator_bind() - bind the power_allocator governor to a thermal zone
  * @tz:	thermal zone to bind it to
@@ -447,6 +497,8 @@ static int power_allocator_bind(struct thermal_zone_device *tz)
 
 	reset_pid_controller(params);
 
+	create_debugfs_pi_params(params);
+
 	tz->governor_data = params;
 
 	return 0;
@@ -459,6 +511,7 @@ free:
 static void power_allocator_unbind(struct thermal_zone_device *tz)
 {
 	dev_dbg(&tz->device, "Unbinding from thermal zone %d\n", tz->id);
+	delete_debugfs_pi_params(tz->governor_data);
 	devm_kfree(&tz->device, tz->governor_data);
 	tz->governor_data = NULL;
 }
@@ -510,6 +563,15 @@ static int power_allocator_throttle(struct thermal_zone_device *tz, int trip)
 	return allocate_power(tz, current_temp, control_temp);
 }
 
+static void create_debugfs_interface(void)
+{
+	power_allocator_d = debugfs_create_dir("power_allocator", NULL);
+	if (IS_ERR_OR_NULL(power_allocator_d)) {
+		pr_info("unable to create debugfs directory\n");
+		return;
+	}
+}
+
 static struct thermal_governor thermal_gov_power_allocator = {
 	.name		= "power_allocator",
 	.bind_to_tz	= power_allocator_bind,
@@ -519,6 +581,8 @@ static struct thermal_governor thermal_gov_power_allocator = {
 
 int thermal_gov_power_allocator_register(void)
 {
+	create_debugfs_interface();
+
 	return thermal_register_governor(&thermal_gov_power_allocator);
 }
 
