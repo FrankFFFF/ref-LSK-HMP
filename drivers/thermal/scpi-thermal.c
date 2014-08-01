@@ -22,6 +22,8 @@ enum cluster_type {
 
 struct scpi_sensor {
 	u16 sensor_id;
+	unsigned long prev_temp;
+	u32 alpha;
 	struct thermal_zone_device *tzd;
 	struct cpumask cluster[NUM_CLUSTERS];
 	struct thermal_cooling_device *cdevs[NUM_CLUSTERS];
@@ -152,18 +154,44 @@ static u32 get_static_power(cpumask_t *cpumask, unsigned long u_volt)
 	return mw_leakage;
 }
 
+#define FRAC_BITS 8
+#define int_to_frac(x) ((x) << FRAC_BITS)
+#define frac_to_int(x) ((x) >> FRAC_BITS)
+
+/**
+ * mul_frac() - multiply two fixed-point numbers
+ * @x:	first multiplicand
+ * @y:	second multiplicand
+ *
+ * Return: the result of multiplying two fixed-point numbers.  The
+ * result is also a fixed-point number.
+ */
+static inline s64 mul_frac(s64 x, s64 y)
+{
+	return (x * y) >> FRAC_BITS;
+}
+
 static int get_temp_value(void *data, long *temp)
 {
 	struct scpi_sensor *sensor = (struct scpi_sensor *)data;
 	u32 val;
 	int ret;
+	unsigned long est_temp;
 
 	ret = scpi_get_sensor_value(sensor->sensor_id, &val);
+	if (ret)
+		return ret;
 
-	if (!ret)
-		*temp = (unsigned long)val;
+	if (!sensor->prev_temp)
+		sensor->prev_temp = val;
 
-	return ret;
+	est_temp = mul_frac(sensor->alpha, val) +
+		mul_frac((int_to_frac(1) - sensor->alpha), sensor->prev_temp);
+
+	sensor->prev_temp = est_temp;
+	*temp = est_temp;
+
+	return 0;
 }
 
 static int scpi_get_temp(struct thermal_zone_device *tz, unsigned long *temp)
@@ -305,6 +333,15 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 
 	sensor_data->trip_temp[0] = 60000;
 	sensor_data->trip_temp[1] = 65000;
+
+	/*
+	 * alpha ~= 2 / (N + 1) with N the window of a rolling mean We
+	 * use 8-bit fixed point arithmetic.  For a rolling average of
+	 * window 20, alpha = 2 / (20 + 1) ~= 0.09523809523809523 .
+	 * In 8-bit fixed point arigthmetic, 0.09523809523809523 * 256
+	 * ~= 24
+	 */
+	sensor_data->alpha = 24;
 
 	scpi_tz_params.tbp = tbp;
 
