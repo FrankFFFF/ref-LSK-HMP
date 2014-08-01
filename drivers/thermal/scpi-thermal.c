@@ -1,6 +1,7 @@
 #include <linux/cpu_cooling.h>
 #include <linux/cpufreq.h>
 #include <linux/cpumask.h>
+#include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/scpi_protocol.h>
@@ -194,6 +195,20 @@ static int get_temp_value(void *data, long *temp)
 	return 0;
 }
 
+extern struct dentry *power_allocator_d;
+
+static void update_debugfs(struct scpi_sensor *sensor_data)
+{
+	struct dentry *dentry_f;
+
+	dentry_f = debugfs_create_u32("alpha", S_IWUSR | S_IRUGO,
+				power_allocator_d, &sensor_data->alpha);
+	if (IS_ERR_OR_NULL(dentry_f)) {
+		pr_warn("Unable to create debugfsfile: alpha\n");
+		return;
+	}
+}
+
 static int scpi_get_temp(struct thermal_zone_device *tz, unsigned long *temp)
 {
 	return get_temp_value(tz->devdata, temp);
@@ -357,6 +372,8 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 		dev_warn(&pdev->dev, "Error registering sensor: %p\n", sensor_data->tzd);
 		return PTR_ERR(sensor_data->tzd);
 	}
+
+	update_debugfs(sensor_data);
 
 	thermal_zone_device_update(sensor_data->tzd);
 
