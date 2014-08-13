@@ -18,6 +18,7 @@
 #include <linux/cpuidle.h>
 #include <linux/init.h>
 #include <linux/of.h>
+#include <linux/pm.h>
 #include <linux/smp.h>
 #include <linux/slab.h>
 #include <linux/reboot.h>
@@ -65,6 +66,8 @@ enum psci_function {
 	PSCI_FN_MIGRATE,
 	PSCI_FN_AFFINITY_INFO,
 	PSCI_FN_MIGRATE_INFO_TYPE,
+	PSCI_FN_SYSTEM_RESET,
+	PSCI_FN_SYSTEM_OFF,
 	PSCI_FN_MAX,
 };
 
@@ -342,6 +345,16 @@ static int __init psci_0_1_init(struct device_node *np)
 	if (!of_property_read_u32(np, "migrate", &id)) {
 		psci_function_id[PSCI_FN_MIGRATE] = id;
 		psci_ops.migrate = psci_migrate;
+	}
+
+	if (!of_property_read_u32(np, "sys_reset", &id)) {
+		psci_function_id[PSCI_FN_SYSTEM_RESET] = id;
+		arm_pm_restart = psci_sys_reset;
+	}
+
+	if (!of_property_read_u32(np, "sys_poweroff", &id)) {
+		psci_function_id[PSCI_FN_SYSTEM_OFF] = id;
+		pm_power_off = psci_sys_poweroff;
 	}
 
 out_put_node:
