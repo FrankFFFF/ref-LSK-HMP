@@ -24,7 +24,7 @@
 #include <linux/thermal.h>
 #include <linux/cpufreq.h>
 #include <linux/err.h>
-#include <linux/pm_opp.h>
+#include <linux/opp.h>
 #include <linux/slab.h>
 #include <linux/cpu.h>
 #include <linux/cpu_cooling.h>
@@ -352,7 +352,7 @@ static int build_dyn_power_table(struct cpufreq_cooling_device *cpufreq_device,
 				u32 capacitance)
 {
 	struct power_table *power_table;
-	struct dev_pm_opp *opp;
+	struct opp *opp;
 	struct device *dev = NULL;
 	int num_opps, cpu, i, ret = 0;
 	unsigned long freq;
@@ -366,7 +366,7 @@ static int build_dyn_power_table(struct cpufreq_cooling_device *cpufreq_device,
 		if (!dev)
 			continue;
 
-		num_opps = dev_pm_opp_get_opp_count(dev);
+		num_opps = opp_get_opp_count(dev);
 		if (num_opps > 0) {
 			break;
 		} else if (num_opps < 0) {
@@ -384,13 +384,14 @@ static int build_dyn_power_table(struct cpufreq_cooling_device *cpufreq_device,
 
 	i = 0;
 	for (freq = 0;
-	     opp = dev_pm_opp_find_freq_ceil(dev, &freq), !IS_ERR(opp);
+	     opp = opp_find_freq_ceil(dev, &freq), !IS_ERR(opp);
 	     freq++) {
 		u32 freq_mhz, voltage_mv;
 		u64 power;
 
 		freq_mhz = freq / 1000000;
-		voltage_mv = dev_pm_opp_get_voltage(opp) / 1000;
+		voltage_mv = opp_get_voltage(opp) / 1000;
+
 
 		/*
 		 * Do the multiplication with MHz and millivolt so as
@@ -491,7 +492,7 @@ static u32 get_static_power(struct cpufreq_cooling_device *cpufreq_device,
 			unsigned long freq)
 {
 	struct device *cpu_dev;
-	struct dev_pm_opp *opp;
+	struct opp *opp;
 	unsigned long voltage;
 	struct cpumask *cpumask = &cpufreq_device->allowed_cpus;
 	unsigned long freq_hz = freq * 1000;
@@ -503,8 +504,8 @@ static u32 get_static_power(struct cpufreq_cooling_device *cpufreq_device,
 
 	rcu_read_lock();
 
-	opp = dev_pm_opp_find_freq_exact(cpu_dev, freq_hz, true);
-	voltage = dev_pm_opp_get_voltage(opp);
+	opp = opp_find_freq_exact(cpu_dev, freq_hz, true);
+	voltage = opp_get_voltage(opp);
 
 	rcu_read_unlock();
 
