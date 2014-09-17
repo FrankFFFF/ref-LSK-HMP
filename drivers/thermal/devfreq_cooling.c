@@ -18,7 +18,7 @@
 #include <linux/devfreq_cooling.h>
 #include <linux/export.h>
 #include <linux/slab.h>
-#include <linux/pm_opp.h>
+#include <linux/opp.h>
 #include <linux/thermal.h>
 
 static int devfreq_cooling_get_max_state(struct thermal_cooling_device *cdev,
