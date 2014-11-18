@@ -138,6 +138,9 @@ struct thermal_cooling_device_ops {
 	int (*get_max_state) (struct thermal_cooling_device *, unsigned long *);
 	int (*get_cur_state) (struct thermal_cooling_device *, unsigned long *);
 	int (*set_cur_state) (struct thermal_cooling_device *, unsigned long);
+	u32 (*get_actual_power) (struct thermal_cooling_device *);
+	u32 (*state2power) (struct thermal_cooling_device *, unsigned long);
+	unsigned long (*power2state) (struct thermal_cooling_device *, u32);
 };
 
 struct thermal_cooling_device {
@@ -308,6 +311,15 @@ void thermal_zone_of_sensor_unregister(struct device *dev,
 }
 
 #endif
+
+static inline bool cdev_is_power_actor(struct thermal_cooling_device *cdev)
+{
+	return cdev->ops->get_actual_power && cdev->ops->state2power &&
+		cdev->ops->power2state;
+}
+
+u32 power_actor_get_max_power(struct thermal_cooling_device *);
+int power_actor_set_power(struct thermal_cooling_device *, u32);
 struct thermal_zone_device *thermal_zone_device_register(const char *, int, int,
 		void *, struct thermal_zone_device_ops *,
 		const struct thermal_zone_params *, int, int);

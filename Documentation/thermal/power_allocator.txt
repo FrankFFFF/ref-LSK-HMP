@@ -1,0 +1,27 @@
+Cooling device power API
+========================
+
+Cooling devices controlled by this governor must supply the additional
+"power" API in their `cooling_device_ops`.  It consists on three ops:
+
+1. u32 get_actual_power(struct thermal_cooling_device *cdev);
+@cdev: The `struct thermal_cooling_device` pointer
+
+`get_actual_power()` returns the power currently consumed by the
+device in milliwatts.
+
+2. u32 state2power(struct thermal_cooling_device *cdev, unsigned long
+        state);
+@cdev: The `struct thermal_cooling_device` pointer
+@state: A cooling device state
+
+Convert cooling device state @state into power consumption in
+milliwatts.
+
+3. unsigned long power2state(struct thermal_cooling_device *cdev,
+        u32 power);
+@cdev: The `struct thermal_cooling_device` pointer
+@power: power in milliwatts
+
+Calculate a cooling device state that would make the device consume at
+most @power mW.

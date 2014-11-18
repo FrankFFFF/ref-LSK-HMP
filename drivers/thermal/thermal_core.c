@@ -851,6 +851,44 @@ emul_temp_store(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR(emul_temp, S_IWUSR, NULL, emul_temp_store);
 #endif/*CONFIG_THERMAL_EMULATION*/
 
+/**
+ * power_actor_get_max_power() - get the maximum power that a cdev can consume
+ * @cdev:	pointer to &thermal_cooling_device
+ *
+ * Calculate the maximum power consumption in milliwats that the
+ * cooling device can currently consume.  If @cdev doesn't support the
+ * power_actor API, this function returns 0.
+ */
+u32 power_actor_get_max_power(struct thermal_cooling_device *cdev)
+{
+	if (!cdev_is_power_actor(cdev))
+		return 0;
+
+	return cdev->ops->state2power(cdev, 0);
+}
+
+/**
+ * power_actor_set_power() - limit the maximum power that a cooling device can consume
+ * @cdev:	pointer to &thermal_cooling_device
+ * @power:	the power in milliwatts
+ *
+ * Set the cooling device to consume at most @power milliwatts.
+ *
+ * Returns: 0 on success, -EINVAL if the cooling device does not
+ * implement the power actor API or -E* for other failures.
+ */
+int power_actor_set_power(struct thermal_cooling_device *cdev, u32 power)
+{
+	unsigned long state;
+
+	if (!cdev_is_power_actor(cdev))
+		return -EINVAL;
+
+	state = cdev->ops->power2state(cdev, power);
+
+	return cdev->ops->set_cur_state(cdev, state);
+}
+
 static DEVICE_ATTR(type, 0444, type_show, NULL);
 static DEVICE_ATTR(temp, 0444, temp_show, NULL);
 static DEVICE_ATTR(mode, 0644, mode_show, mode_store);
