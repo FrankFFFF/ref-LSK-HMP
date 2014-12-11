@@ -4,10 +4,15 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/scpi_protocol.h>
+#include <linux/slab.h>
 #include <linux/thermal.h>
 #include <linux/topology.h>
 
 #define SOC_SENSOR "SENSOR_TEMP_SOC"
+
+#define NUM_TRIPS 2
+#define PASSIVE_INTERVAL 100
+#define IDLE_INTERVAL 1000
 
 #define NUM_CLUSTERS 2
 enum cluster_type {
@@ -20,6 +25,7 @@ struct scpi_sensor {
 	struct thermal_zone_device *tzd;
 	struct cpumask cluster[NUM_CLUSTERS];
 	struct thermal_cooling_device *cdevs[NUM_CLUSTERS];
+	int trip_temp[NUM_TRIPS];
 };
 
 struct scpi_sensor scpi_temp_sensor;
@@ -38,6 +44,27 @@ static int get_dyn_power_coeff(enum cluster_type cluster)
 	}
 
 	return coeff;
+}
+
+#define GPU_WEIGHT (1 << 8)
+
+/*
+ * The weight is an integer multiplied by 256.
+ */
+static u32 get_cluster_weight(enum cluster_type cluster)
+{
+	u32 weight = 0;
+
+	switch(cluster) {
+	case CLUSTER_BIG:
+		weight = 1 * 256;
+		break;
+	case CLUSTER_LITTLE:
+		weight = 2 * 256;
+		break;
+	}
+
+	return weight;
 }
 
 static int get_cpu_static_power_coeff(enum cluster_type cluster)
@@ -139,10 +166,79 @@ static int get_temp_value(void *data, long *temp)
 	return ret;
 }
 
+static int scpi_get_temp(struct thermal_zone_device *tz, unsigned long *temp)
+{
+	return get_temp_value(tz->devdata, temp);
+}
+
+static int scpi_get_trip_type(struct thermal_zone_device *tz, int trip,
+			enum thermal_trip_type *type)
+{
+	*type = THERMAL_TRIP_PASSIVE;
+
+	return 0;
+}
+
+static int scpi_get_trip_temp(struct thermal_zone_device *tz, int trip,
+			unsigned long *temp)
+{
+	struct scpi_sensor *sensor_data = tz->devdata;
+
+	if ((trip < 0) || trip >= NUM_TRIPS)
+		return -EINVAL;
+
+	*temp = sensor_data->trip_temp[trip];
+	return 0;
+}
+
+#define DECLARE_MATCH_CPU_FUNCTION(clus_name)			    \
+static int match_##clus_name##_cdev(struct thermal_zone_device *tz, \
+				struct thermal_cooling_device *cdev)	\
+{									\
+	struct cpufreq_cooling_device *cpufreq_cdev;			\
+	struct cpumask *my_cpumask, *cdev_cpumask;			\
+									\
+	if (strncmp(cdev->type, "thermal-cpufreq-", strlen("thermal-cpufreq-"))) \
+		return 1;						\
+									\
+	cpufreq_cdev = cdev->devdata;					\
+	cdev_cpumask = &cpufreq_cdev->allowed_cpus;			\
+	my_cpumask = &scpi_temp_sensor.cluster[clus_name];		\
+									\
+	return !cpumask_equal(my_cpumask, cdev_cpumask);		\
+}
+
+DECLARE_MATCH_CPU_FUNCTION(CLUSTER_LITTLE)
+DECLARE_MATCH_CPU_FUNCTION(CLUSTER_BIG)
+
+static int match_gpu_devfreq_cdev(struct thermal_zone_device *tz,
+				struct thermal_cooling_device *cdev)
+{
+	return strcmp(cdev->type, "devfreq");
+}
+
+static int (*match_cpu_cdev[]) (struct thermal_zone_device *,
+			struct thermal_cooling_device *) = {
+	[CLUSTER_BIG] = match_CLUSTER_BIG_cdev,
+	[CLUSTER_LITTLE] = match_CLUSTER_LITTLE_cdev,
+};
+
+static struct thermal_zone_device_ops scpi_tz_ops = {
+	.get_temp = scpi_get_temp,
+	.get_trip_type = scpi_get_trip_type,
+	.get_trip_temp = scpi_get_trip_temp,
+};
+
+static struct thermal_zone_params scpi_tz_params = {
+	.sustainable_power = 2500,
+	.num_tbps = 3,
+};
+
 static int scpi_thermal_probe(struct platform_device *pdev)
 {
 	struct scpi_sensor *sensor_data = &scpi_temp_sensor;
 	struct device_node *np;
+	struct thermal_bind_params *tbp;
 	int sensor, cpu;
 	int i;
 
@@ -153,6 +249,10 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, sensor_data);
+
+	tbp = kcalloc(scpi_tz_params.num_tbps, sizeof(*tbp), GFP_KERNEL);
+	if (!tbp)
+		return -ENOMEM;
 
 	for_each_possible_cpu(cpu) {
 		int cluster_id = topology_physical_package_id(cpu);
@@ -184,7 +284,16 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 		if (IS_ERR(sensor_data->cdevs[i]))
 			dev_warn(&pdev->dev,
 				"Error registering cooling device: %d\n", i);
+
+		tbp[i].match = match_cpu_cdev[cluster];
+		tbp[i].trip_mask = 1 << 1;
+		tbp[i].weight = get_cluster_weight(cluster);
 	}
+
+	BUG_ON(i >= scpi_tz_params.num_tbps);
+	tbp[i].match = match_gpu_devfreq_cdev;
+	tbp[i].trip_mask = 1 << 1;
+	tbp[i].weight = GPU_WEIGHT;
 
 	if ((sensor = scpi_get_sensor(SOC_SENSOR)) < 0) {
 		dev_warn(&pdev->dev, "%s not found. ret=%d\n", SOC_SENSOR, sensor);
@@ -194,10 +303,18 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 	sensor_data->sensor_id = (u16)sensor;
 	dev_info(&pdev->dev, "Probed %s sensor. Id=%hu\n", SOC_SENSOR, sensor_data->sensor_id);
 
-	sensor_data->tzd = thermal_zone_of_sensor_register(&pdev->dev,
-							sensor_data->sensor_id,
-							sensor_data,
-							get_temp_value, NULL);
+	sensor_data->trip_temp[0] = 60000;
+	sensor_data->trip_temp[1] = 65000;
+
+	scpi_tz_params.tbp = tbp;
+
+	sensor_data->tzd = thermal_zone_device_register("scpi_thermal",
+							NUM_TRIPS,
+							0, sensor_data,
+							&scpi_tz_ops,
+							&scpi_tz_params,
+							PASSIVE_INTERVAL,
+							IDLE_INTERVAL);
 
 	if (IS_ERR(sensor_data->tzd)) {
 		dev_warn(&pdev->dev, "Error registering sensor: %p\n", sensor_data->tzd);

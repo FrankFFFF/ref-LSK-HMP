@@ -44,44 +44,6 @@ struct power_table {
 	u32 power;
 };
 
-/**
- * struct cpufreq_cooling_device - data for cooling device with cpufreq
- * @id: unique integer value corresponding to each cpufreq_cooling_device
- *	registered.
- * @cool_dev: thermal_cooling_device pointer to keep track of the
- *	registered cooling device.
- * @cpufreq_state: integer value representing the current state of cpufreq
- *	cooling	devices.
- * @cpufreq_val: integer value representing the absolute value of the clipped
- *	frequency.
- * @allowed_cpus: all the cpus involved for this cpufreq_cooling_device.
- * @last_load: load measured by the latest call to cpufreq_get_actual_power()
- * @time_in_idle: previous reading of the absolute time that this cpu was idle
- * @time_in_idle_timestamp: wall time of the last invocation of
- *	get_cpu_idle_time_us()
- * @dyn_power_table: array of struct power_table for frequency to power
- *	conversion
- * @dyn_power_table_entries: number of entries in the @dyn_power_table array
- * @plat_get_static_power: callback to calculate the static power
- *
- * This structure is required for keeping information of each
- * cpufreq_cooling_device registered. In order to prevent corruption of this a
- * mutex lock cooling_cpufreq_lock is used.
- */
-struct cpufreq_cooling_device {
-	int id;
-	struct thermal_cooling_device *cool_dev;
-	unsigned int cpufreq_state;
-	unsigned int cpufreq_val;
-	struct cpumask allowed_cpus;
-	struct list_head node;
-	u32 last_load;
-	u64 time_in_idle[NR_CPUS];
-	u64 time_in_idle_timestamp[NR_CPUS];
-	struct power_table *dyn_power_table;
-	int dyn_power_table_entries;
-	get_static_t plat_get_static_power;
-};
 static DEFINE_IDR(cpufreq_idr);
 static DEFINE_MUTEX(cooling_cpufreq_lock);
 
