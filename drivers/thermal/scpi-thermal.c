@@ -242,6 +242,18 @@ static int scpi_get_trip_temp(struct thermal_zone_device *tz, int trip,
 	return 0;
 }
 
+static int scpi_set_trip_temp(struct thermal_zone_device *tz, int trip,
+			unsigned long temp)
+{
+	struct scpi_sensor *sensor_data = tz->devdata;
+
+	if ((trip < 0) || trip >= NUM_TRIPS)
+		return -EINVAL;
+
+	sensor_data->trip_temp[trip] = temp;
+	return 0;
+}
+
 #define DECLARE_MATCH_CPU_FUNCTION(clus_name)			    \
 static int match_##clus_name##_cdev(struct thermal_zone_device *tz, \
 				struct thermal_cooling_device *cdev)	\
@@ -278,6 +290,7 @@ static struct thermal_zone_device_ops scpi_tz_ops = {
 	.get_temp = scpi_get_temp,
 	.get_trip_type = scpi_get_trip_type,
 	.get_trip_temp = scpi_get_trip_temp,
+	.set_trip_temp = scpi_set_trip_temp,
 };
 
 static struct thermal_zone_params scpi_tz_params = {
@@ -290,7 +303,7 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 	struct scpi_sensor *sensor_data = &scpi_temp_sensor;
 	struct device_node *np;
 	struct thermal_bind_params *tbp;
-	int sensor, cpu;
+	int sensor, cpu, trip_writability;
 	int i;
 
 	if (!cpufreq_frequency_get_table(0)) {
@@ -356,6 +369,7 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 
 	sensor_data->trip_temp[0] = 60000;
 	sensor_data->trip_temp[1] = 65000;
+	trip_writability = (1 << 1) | (1 << 0);
 
 	/*
 	 * alpha ~= 2 / (N + 1) with N the window of a rolling mean We
@@ -370,7 +384,8 @@ static int scpi_thermal_probe(struct platform_device *pdev)
 
 	sensor_data->tzd = thermal_zone_device_register("scpi_thermal",
 							NUM_TRIPS,
-							0, sensor_data,
+							trip_writability,
+							sensor_data,
 							&scpi_tz_ops,
 							&scpi_tz_params,
 							PASSIVE_INTERVAL,
