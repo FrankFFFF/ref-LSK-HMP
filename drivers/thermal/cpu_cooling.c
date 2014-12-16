@@ -677,6 +677,10 @@ static u32 cpufreq_state2power(struct thermal_cooling_device *cdev,
 	cpumask_and(&cpumask, &cpufreq_device->allowed_cpus, cpu_online_mask);
 	num_cpus = cpumask_weight(&cpumask);
 
+	/* None of our cpus are online, so no power */
+	if (num_cpus == 0)
+		return 0;
+
 	freq = get_cpu_frequency(cpumask_any(&cpumask), state);
 	if (!freq)
 		return 0;
@@ -705,6 +709,10 @@ static unsigned long cpufreq_power2state(struct thermal_cooling_device *cdev,
 	struct cpufreq_cooling_device *cpufreq_device = cdev->devdata;
 
 	cpu = cpumask_any_and(&cpufreq_device->allowed_cpus, cpu_online_mask);
+
+	/* None of our cpus are online */
+	if (cpu >= NR_CPUS)
+		return 0;
 
 	cur_freq = cpufreq_quick_get(cpu);
 	dyn_power = power - get_static_power(cpufreq_device, cur_freq);
