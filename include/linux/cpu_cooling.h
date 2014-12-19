@@ -28,6 +28,47 @@
 #include <linux/thermal.h>
 #include <linux/cpumask.h>
 
+typedef u32 (*get_static_t)(cpumask_t *cpumask, unsigned long voltage);
+
+/**
+ * struct cpufreq_cooling_device - data for cooling device with cpufreq
+ * @id: unique integer value corresponding to each cpufreq_cooling_device
+ *	registered.
+ * @cool_dev: thermal_cooling_device pointer to keep track of the
+ *	registered cooling device.
+ * @cpufreq_state: integer value representing the current state of cpufreq
+ *	cooling	devices.
+ * @cpufreq_val: integer value representing the absolute value of the clipped
+ *	frequency.
+ * @allowed_cpus: all the cpus involved for this cpufreq_cooling_device.
+ * @last_load: load measured by the latest call to cpufreq_get_actual_power()
+ * @time_in_idle: previous reading of the absolute time that this cpu was idle
+ * @time_in_idle_timestamp: wall time of the last invocation of
+ *	get_cpu_idle_time_us()
+ * @dyn_power_table: array of struct power_table for frequency to power
+ *	conversion
+ * @dyn_power_table_entries: number of entries in the @dyn_power_table array
+ * @plat_get_static_power: callback to calculate the static power
+ *
+ * This structure is required for keeping information of each
+ * cpufreq_cooling_device registered. In order to prevent corruption of this a
+ * mutex lock cooling_cpufreq_lock is used.
+ */
+struct cpufreq_cooling_device {
+	int id;
+	struct thermal_cooling_device *cool_dev;
+	unsigned int cpufreq_state;
+	unsigned int cpufreq_val;
+	struct cpumask allowed_cpus;
+	struct list_head node;
+	u32 last_load;
+	u64 time_in_idle[NR_CPUS];
+	u64 time_in_idle_timestamp[NR_CPUS];
+	struct power_table *dyn_power_table;
+	int dyn_power_table_entries;
+	get_static_t plat_get_static_power;
+};
+
 #ifdef CONFIG_CPU_THERMAL
 /**
  * cpufreq_cooling_register - function to create cpufreq cooling device.
@@ -37,18 +78,50 @@ struct thermal_cooling_device *
 cpufreq_cooling_register(const struct cpumask *clip_cpus);
 
 /**
+ * cpufreq_power_cooling_register() - create cpufreq cooling device with power extensions
+ * @clip_cpus: cpumask of cpus where the frequency constraints will happen
+ * @capacitance:	dynamic power coefficient for these cpus
+ * @plat_static_func:	function to calculate the static power consumed by these
+ *			cpus (optional)
+ */
+struct thermal_cooling_device *
+cpufreq_power_cooling_register(const struct cpumask *clip_cpus,
+			u32 capacitance, get_static_t plat_static_func);
+
+#ifdef CONFIG_THERMAL_OF
+/**
  * of_cpufreq_cooling_register - create cpufreq cooling device based on DT.
  * @np: a valid struct device_node to the cooling device device tree node.
  * @clip_cpus: cpumask of cpus where the frequency constraints will happen
  */
-#ifdef CONFIG_THERMAL_OF
 struct thermal_cooling_device *
 of_cpufreq_cooling_register(struct device_node *np,
 			    const struct cpumask *clip_cpus);
+
+/**
+ * of_cpufreq_power_cooling_register() - create cpufreq cooling device with power extensions
+ * @np:	a valid struct device_node to the cooling device device tree node
+ * @clip_cpus:	cpumask of cpus where the frequency constraints will happen
+ * @capacitance:	dynamic power coefficient for these cpus
+ * @plat_static_func:	function to calculate the static power consumed by these
+ *			cpus (optional)
+ */
+struct thermal_cooling_device *
+of_cpufreq_power_cooling_register(struct device_node *np,
+				const struct cpumask *clip_cpus,
+				u32 capacitance, get_static_t plat_static_func);
 #else
 static inline struct thermal_cooling_device *
 of_cpufreq_cooling_register(struct device_node *np,
 			    const struct cpumask *clip_cpus)
+{
+	return NULL;
+}
+
+struct thermal_cooling_device *
+of_cpufreq_power_cooling_register(struct device_node *np,
+				const struct cpumask *clip_cpus,
+				u32 capacitance, get_static_t plat_static_func)
 {
 	return NULL;
 }
@@ -68,8 +141,21 @@ cpufreq_cooling_register(const struct cpumask *clip_cpus)
 	return NULL;
 }
 static inline struct thermal_cooling_device *
+cpufreq_power_cooling_register(const struct cpumask *clip_cpus,
+			u32 capacitance, get_static_t plat_static_func)
+{
+	return NULL;
+}
+static inline struct thermal_cooling_device *
 of_cpufreq_cooling_register(struct device_node *np,
 			    const struct cpumask *clip_cpus)
+{
+	return NULL;
+}
+static inline struct thermal_cooling_device *
+of_cpufreq_power_cooling_register(struct device_node *np,
+				const struct cpumask *clip_cpus,
+				u32 capacitance, get_static_t plat_static_func)
 {
 	return NULL;
 }
