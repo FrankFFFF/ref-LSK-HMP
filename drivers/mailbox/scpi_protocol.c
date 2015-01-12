@@ -161,15 +161,12 @@ static void scpi_rx_callback(struct mbox_client *cl, void *msg)
 static int send_scpi_cmd(struct scpi_data_buf *scpi_buf, bool high_priority)
 {
 	struct mbox_chan *chan;
-	struct mbox_client cl;
+	struct mbox_client cl = {0};
 	struct mhu_data_buf *data = scpi_buf->data;
 	u32 status;
 
 	cl.dev = the_scpi_device;
 	cl.rx_callback = scpi_rx_callback;
-	cl.tx_done = NULL;
-	cl.tx_block = false;
-	cl.knows_txdone = false;
 
 	chan = mbox_request_channel(&cl, high_priority);
 	if (IS_ERR(chan))
