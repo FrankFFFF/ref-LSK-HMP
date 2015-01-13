@@ -24,7 +24,9 @@
 		#size-cells = <0>;
 
 		cpu-map {
-			cluster1 {
+			cluster1: cluster1 {
+				#cooling-cells = <2>; /* min followed by max */
+
 				core0 {
 					cpu = <&CPU0>;
 				};
@@ -39,7 +41,9 @@
 				};
 			};
 
-			cluster0 {
+			cluster0: cluster0 {
+				#cooling-cells = <2>; /* min followed by max */
+
 				core0 {
 					cpu = <&CPU4>;
 				};
@@ -265,6 +269,11 @@
 		compatible = "arm,scpi-cpufreq";
 	};
 
+        scpi_sensor0: scpi-sensor@0 {
+			compatible = "arm,scpi-thermal";
+			#thermal-sensor-cells = <1>;
+	};
+
 	soc_uartclk: refclk72738khz {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
@@ -477,8 +486,9 @@
 		};
 	}; */
 
-	gpu@0x2d000000 {
+	gpu: gpu@0x2d000000 {
 		compatible = "arm,malit6xx", "arm,mali";
+		#cooling-cells = <2>; /* min followed by max */
 		reg = <0x0 0x2d000000 0x0 0x4000>;
 		interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
 		interrupt-names = "JOB", "MMU", "GPU";
