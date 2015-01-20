@@ -40,8 +40,12 @@
 /* No upper/lower limit requirement */
 #define THERMAL_NO_LIMIT	THERMAL_CSTATE_INVALID
 
-/* Default weight of a bound cooling device */
-#define THERMAL_WEIGHT_DEFAULT 0
+/*
+ * Default weight of a bound cooling device.  By setting it to 1024 we
+ * give developers a range so that they can specify cooling devices
+ * that are less or more "influential" than the default
+ */
+#define THERMAL_WEIGHT_DEFAULT 1024
 
 /* Unit conversion macros */
 #define KELVIN_TO_CELSIUS(t)	(long)(((long)t-2732 >= 0) ?	\
@@ -242,9 +246,12 @@ struct thermal_bind_params {
 
 	/*
 	 * This is a measure of 'how effectively these devices can
-	 * cool 'this' thermal zone. The shall be determined by platform
-	 * characterization. This is on a 'percentage' scale.
-	 * See Documentation/thermal/sysfs-api.txt for more information.
+	 * cool 'this' thermal zone. It shall be determined by
+	 * platform characterization. This value is relative to the
+	 * rest of the weights so a cooling device whose weight is
+	 * double that of another cooling device is twice as
+	 * effective. See Documentation/thermal/sysfs-api.txt for more
+	 * information.
 	 */
 	int weight;
 
