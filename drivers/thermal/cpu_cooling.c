@@ -761,7 +761,7 @@ static int cpufreq_state2power(struct thermal_cooling_device *cdev,
 		return 0;
 	}
 
-	freq = cpufreq_device->freq_table[state];
+	freq = get_cpu_frequency(cpumask_any(&cpumask), state);
 	if (!freq)
 		return -EINVAL;
 
@@ -904,8 +904,8 @@ __cpufreq_cooling_register(struct device_node *np,
 
 		ret = build_dyn_power_table(cpufreq_dev, capacitance);
 		if (ret) {
-			cool_dev = ERR_PTR(ret);
-			goto free_table;
+			kfree(cpufreq_dev);
+			return ERR_PTR(ret);
 		}
 	}
 
