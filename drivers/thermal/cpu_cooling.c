@@ -538,15 +538,19 @@ static int get_static_power(struct cpufreq_cooling_device *cpufreq_device,
 	struct cpumask *cpumask = &cpufreq_device->allowed_cpus;
 	unsigned long freq_hz = freq * 1000;
 
-	if (!cpufreq_device->plat_get_static_power) {
-		*power = 0;
-		return 0;
-	}
+	if (!cpufreq_device->plat_get_static_power)
+		goto no_static_power;
 
 	rcu_read_lock();
 
 	opp = opp_find_freq_exact(cpufreq_device->cpu_dev, freq_hz,
 				  true);
+
+	if (IS_ERR_OR_NULL(opp)) {
+		rcu_read_unlock();
+		goto no_static_power;
+	}
+
 	voltage = opp_get_voltage(opp);
 
 	rcu_read_unlock();
@@ -560,6 +564,10 @@ static int get_static_power(struct cpufreq_cooling_device *cpufreq_device,
 
 	return cpufreq_device->plat_get_static_power(cpumask, tz->passive_delay,
 						     voltage, power);
+
+no_static_power:
+	*power = 0;
+	return 0;
 }
 
 /**
