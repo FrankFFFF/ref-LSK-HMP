@@ -42,6 +42,7 @@
 #include <linux/of_fdt.h>
 #include <linux/of_platform.h>
 #include <linux/efi.h>
+#include <linux/debugfs.h>
 
 #include <asm/fixmap.h>
 #include <asm/cputype.h>
@@ -482,6 +483,16 @@ static const char *hwcap_str[] = {
 	"crc32",
 	NULL
 };
+
+
+static u32 fake_armv7 = 0;
+
+static int __init fake_armv7_init(void)
+{
+	debugfs_create_bool("fake_armv7", 0666, NULL, &fake_armv7);
+	return 0;
+}
+late_initcall(fake_armv7_init);
 
 static int c_show(struct seq_file *m, void *v)
 {
