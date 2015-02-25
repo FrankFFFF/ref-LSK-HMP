@@ -140,6 +140,10 @@
 			     <GIC_SPI 06 IRQ_TYPE_LEVEL_HIGH>;
 	};
 
+	cpufreq {
+		compatible = "arm,scpi-cpufreq";
+	};
+
 	/include/ "juno-clocks.dtsi"
 
 	dma@7ff00000 {
