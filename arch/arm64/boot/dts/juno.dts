@@ -11,7 +11,7 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 
 / {
-	model = "ARM Juno development board (r0)";
+	model = "Juno";
 	compatible = "arm,juno", "arm,vexpress";
 	interrupt-parent = <&gic>;
 	#address-cells = <2>;
