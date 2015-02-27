@@ -90,6 +90,38 @@ freq_get_state(struct devfreq *df, unsigned long freq)
        return state;
 }
 
+static unsigned long
+state_get_freq(struct devfreq *df, unsigned long state)
+{
+	if (state >= df->profile->max_state)
+		return 0;
+
+	return df->profile->freq_table[state];
+}
+
+static unsigned long
+get_static_power(struct devfreq_cooling_device *dfc, unsigned long freq)
+{
+	struct devfreq *df = dfc->devfreq;
+	struct device *dev = df->dev.parent;
+	unsigned long voltage;
+	struct opp *opp;
+
+	rcu_read_lock();
+	opp = opp_find_freq_exact(dev, freq, true);
+	voltage = opp_get_voltage(opp) / 1000; /* mV */
+	rcu_read_unlock();
+
+	if (voltage == 0) {
+		dev_warn_ratelimited(dev,
+				     "Failed to get voltage for frequency %lu: %ld\n",
+				     freq, IS_ERR(opp) ? PTR_ERR(opp) : 0);
+		return 0;
+	}
+
+	return dfc->power_ops->get_static_power(voltage);
+}
+
 static int devfreq_cooling_get_requested_power(struct thermal_cooling_device *cdev,
 					       struct thermal_zone_device *tz,
 					       u32 *power)
@@ -98,13 +130,21 @@ static int devfreq_cooling_get_requested_power(struct thermal_cooling_device *cd
 	struct devfreq_dev_status *status = &dfc->last_status;
 	struct devfreq *df = dfc->devfreq;
 	unsigned long state;
+	unsigned long freq = status->current_frequency;
+	u32 dyn_power, static_power;
 
-	/* Get power for state */
-	state = freq_get_state(df, status->current_frequency);
-	*power = dfc->power_table[state];
+	/* Get dynamic power for state */
+	state = freq_get_state(df, freq);
+	dyn_power = dfc->power_table[state];
 
-	/* Scale power for utilization */
-	*power = (*power * status->busy_time) / status->total_time;
+	/* Scale dynamic power for utilization */
+	dyn_power = (dyn_power * status->busy_time) / status->total_time;
+
+	/* Get static power */
+	static_power = get_static_power(dfc, freq);
+
+	*power = dyn_power + static_power;
+
 	return 0;
 }
 
@@ -114,7 +154,14 @@ static int devfreq_cooling_state2power(struct thermal_cooling_device *cdev,
 				       u32 *power)
 {
 	struct devfreq_cooling_device *dfc = cdev->devdata;
-	*power = dfc->power_table[state];
+	struct devfreq *df = dfc->devfreq;
+	unsigned long freq;
+	u32 static_power;
+
+	freq = state_get_freq(df, state);
+	static_power = get_static_power(dfc, freq);
+
+	*power = dfc->power_table[state] + static_power;
 	return 0;
 }
 
@@ -123,15 +170,29 @@ static int devfreq_cooling_power2state(struct thermal_cooling_device *cdev,
 				       unsigned long *state)
 {
 	struct devfreq_cooling_device *dfc = cdev->devdata;
+	struct devfreq_dev_status *status = &dfc->last_status;
 	struct devfreq *df = dfc->devfreq;
+	unsigned long freq = status->current_frequency;
+	s32 dyn_power;
+	u32 static_power;
 	int i;
 
-	/* Find the first cooling state that is within the power budget. */
+	static_power = get_static_power(dfc, freq);
+
+	dyn_power = power - static_power;
+	dyn_power = dyn_power > 0 ? dyn_power : 0;
+
+	/* Scale dynamic power for utilization */
+	dyn_power = (dyn_power * status->busy_time) / status->total_time;
+
+	/* Find the first cooling state that is within the power budget for
+	 * dynamic power.
+	*/
 	for (i = 0; i < df->profile->max_state - 1; i++)
-		if (power >= dfc->power_table[i])
+		if (dyn_power >= dfc->power_table[i])
 			break;
 
-	*state=i;
+	*state = i;
 	return 0;
 }
 
@@ -181,7 +242,7 @@ static int devfreq_cooling_gen_power_table(struct devfreq_cooling_device *dfc)
 
 	rcu_read_lock();
 	for (i = 0, freq = ULONG_MAX; i < num_opps; i++, freq--) {
-		unsigned long power_static, power_dyn, voltage;
+		unsigned long power_dyn, voltage;
 		struct opp *opp;
 
 		opp = opp_find_freq_floor(dev, &freq);
@@ -191,14 +252,11 @@ static int devfreq_cooling_gen_power_table(struct devfreq_cooling_device *dfc)
 		voltage = opp_get_voltage(opp) / 1000; /* mV */
 
 		power_dyn = callbacks->get_dynamic_power(freq, voltage);
-		power_static = callbacks->get_static_power(voltage);
 
-		dev_info(dev, "Power table: %lu MHz @ %lu mV: %lu + %lu = %lu mW\n",
-				freq / 1000000, voltage,
-				power_dyn, power_static,
-				power_dyn + power_static);
+		dev_info(dev, "Dynamic power table: %lu MHz @ %lu mV: %lu = %lu mW\n",
+				freq / 1000000, voltage, power_dyn, power_dyn);
 
-		table[i] = power_dyn + power_static;
+		table[i] = power_dyn;
 	}
 	rcu_read_unlock();
 
