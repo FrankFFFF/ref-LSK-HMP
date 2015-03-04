@@ -691,7 +691,15 @@ static int cpufreq_get_requested_power(struct thermal_cooling_device *cdev,
 	struct cpufreq_cooling_device *cpufreq_device = cdev->devdata;
 	u32 *load_cpu = NULL;
 
-	freq = cpufreq_quick_get(cpumask_any(&cpufreq_device->allowed_cpus));
+	cpu = cpumask_any_and(&cpufreq_device->allowed_cpus, cpu_online_mask);
+
+	/* None of allowed_cpus are online */
+	if (cpu >= nr_cpu_ids) {
+		*power = 0;
+		return -ENODEV;
+	}
+
+	freq = cpufreq_quick_get(cpu);
 
 	if (trace_thermal_power_cpu_get_power_enabled()) {
 		u32 ncpus = cpumask_weight(&cpufreq_device->allowed_cpus);
