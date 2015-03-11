@@ -230,6 +230,10 @@
 		};
 	};
 
+	cpufreq {
+		compatible = "arm,scpi-cpufreq";
+	};
+
 	/include/ "juno-clocks.dtsi"
 
 	hwmon@1c010000 {
