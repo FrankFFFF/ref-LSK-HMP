@@ -88,6 +88,8 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			clocks = <&scpi_dvfs 0>;
+			clock-names = "vbig";
 		};
 
 		A57_1: cpu@1 {
@@ -96,6 +98,8 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			clocks = <&scpi_dvfs 0>;
+			clock-names = "vbig";
 		};
 
 		A53_0: cpu@100 {
@@ -104,6 +108,8 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			clocks = <&scpi_dvfs 1>;
+			clock-names = "vlittle";
 		};
 
 		A53_1: cpu@101 {
@@ -112,6 +118,8 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			clocks = <&scpi_dvfs 1>;
+			clock-names = "vlittle";
 		};
 
 		A53_2: cpu@102 {
@@ -120,6 +128,8 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			clocks = <&scpi_dvfs 1>;
+			clock-names = "vlittle";
 		};
 
 		A53_3: cpu@103 {
@@ -128,6 +138,8 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			cpu-idle-states = <&CPU_SLEEP_0 &CLUSTER_SLEEP_0>;
+			clocks = <&scpi_dvfs 1>;
+			clock-names = "vlittle";
 		};
 	};
 
@@ -191,6 +203,33 @@
 		#mbox-cells = <1>;
 		mbox-names = "cpu_to_scp_low", "cpu_to_scp_high";
 		mboxes = <&mailbox 0 &mailbox 1>;
+	};
+
+	clocks {
+		compatible = "arm,scpi-clks";
+
+		scpi_dvfs: scpi_clocks@0 {
+			compatible = "arm,scpi-clk-indexed";
+			#clock-cells = <1>;
+			clock-indices = <0>, <1>, <2>;
+			clock-output-names = "vbig", "vlittle", "vgpu";
+		};
+
+		scpi_clk: scpi_clocks@3 {
+			compatible = "arm,scpi-clk-range";
+			#clock-cells = <1>;
+			clock-indices = <3>, <4>;
+			frequency-range = <23750000 165000000>;
+			clock-output-names = "pxlclk0", "pxlclk1";
+		};
+
+		scpi_i2sclk: scpi_clocks@5 {
+			compatible = "arm,scpi-clk-range";
+			#clock-cells = <1>;
+			clock-indices = <5>;
+			frequency-range = <1536000 9216000>;
+			clock-output-names = "i2s_clock";
+		};
 	};
 
 	/include/ "juno-clocks.dtsi"
@@ -282,6 +321,8 @@
 		reg = <0x0 0x2d000000 0x0 0x4000>;
 		interrupts = <0 33 4>, <0 34 4>, <0 32 4>;
 		interrupt-names = "JOB", "MMU", "GPU";
+		clocks = <&scpi_dvfs 2>;
+		clock-names = "clk_mali";
 	};
 
 	smb {
