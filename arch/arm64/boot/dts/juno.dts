@@ -223,7 +223,7 @@
 		compatible = "arm,hdlcd";
 		reg = <0 0x7ff60000 0 0x1000>;
 		interrupts = <0 85 4>;
-		clocks = <&scpi_clk 0>;
+		clocks = <&pixel_clk 0>;
 		clock-names = "pxlclk";
 		i2c-slave = <&dvi0>;
 
@@ -248,7 +248,7 @@
 		compatible = "arm,hdlcd";
 		reg = <0 0x7ff50000 0 0x1000>;
 		interrupts = <0 93 4>;
-		clocks = <&scpi_clk 1>;
+		clocks = <&pixel_clk 1>;
 		clock-names = "pxlclk";
 		i2c-slave = <&dvi1>;
 
