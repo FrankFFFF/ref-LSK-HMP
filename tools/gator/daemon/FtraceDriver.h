@@ -19,11 +19,14 @@ public:
 	void readEvents(mxml_node_t *const xml);
 
 	void prepare();
-	int read(const char *line, int64_t **buf);
 	void stop();
+
+	bool isSupported() const { return mSupported; }
 
 private:
 	int64_t *mValues;
+	bool mSupported;
+	int mTracingOn;
 
 	// Intentionally unimplemented
 	FtraceDriver(const FtraceDriver &);
