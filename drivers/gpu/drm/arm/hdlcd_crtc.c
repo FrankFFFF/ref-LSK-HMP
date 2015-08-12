@@ -38,12 +38,13 @@ static void hdlcd_crtc_destroy(struct drm_crtc *crtc)
 	drm_crtc_cleanup(crtc);
 }
 
-void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd)
+void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd, bool wait)
 {
 	struct drm_framebuffer *fb = hdlcd->crtc.primary->fb;
 	struct drm_gem_cma_object *gem;
 	unsigned int depth, bpp;
 	dma_addr_t scanout_start;
+	int ret;
 
 	drm_fb_get_bpp_depth(fb->pixel_format, &depth, &bpp);
 	gem = drm_fb_cma_get_gem_obj(fb, 0);
@@ -52,6 +53,16 @@ void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd)
 		(hdlcd->crtc.y * fb->pitches[0]) + (hdlcd->crtc.x * bpp/8);
 
 	hdlcd_write(hdlcd, HDLCD_REG_FB_BASE, scanout_start);
+
+	if (wait && hdlcd->dpms == DRM_MODE_DPMS_ON) {
+		drm_vblank_get(fb->dev, 0);
+		reinit_completion(&hdlcd->frame_completion);
+		do {
+			ret = wait_for_completion_interruptible_timeout(&hdlcd->frame_completion,
+							msecs_to_jiffies(50));
+		} while (ret <= 0);
+		drm_vblank_put(fb->dev, 0);
+	}
 }
 
 static int hdlcd_crtc_page_flip(struct drm_crtc *crtc,
@@ -72,11 +83,13 @@ static int hdlcd_crtc_page_flip(struct drm_crtc *crtc,
 
 	crtc->primary->fb = fb;
 
-	if (hdlcd->dpms != DRM_MODE_DPMS_ON) {
+	if (hdlcd->dpms == DRM_MODE_DPMS_ON) {
+		hdlcd_set_scanout(hdlcd, true);
+	} else {
 		unsigned long flags;
 
 		/* not active, update registers immediately */
-		hdlcd_set_scanout(hdlcd);
+		hdlcd_set_scanout(hdlcd, false);
 		spin_lock_irqsave(&crtc->dev->event_lock, flags);
 		if (event)
 			drm_send_vblank_event(crtc->dev, 0, event);
@@ -189,7 +202,7 @@ static int hdlcd_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	struct drm_framebuffer *old_fb)
 {
 	struct hdlcd_drm_private *hdlcd = crtc_to_hdlcd_priv(crtc);
-	hdlcd_set_scanout(hdlcd);
+	hdlcd_set_scanout(hdlcd, true);
 	return 0;
 }
 
@@ -248,7 +261,7 @@ static int hdlcd_crtc_mode_set(struct drm_crtc *crtc,
 	clk_set_rate(hdlcd->clk, mode->crtc_clock * 1000);
 	clk_enable(hdlcd->clk);
 
-	hdlcd_set_scanout(hdlcd);
+	hdlcd_set_scanout(hdlcd, false);
 
 	return 0;
 }
