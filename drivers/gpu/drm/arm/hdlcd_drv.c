@@ -26,8 +26,6 @@
 #include "hdlcd_drv.h"
 #include "hdlcd_regs.h"
 
-static void hdlcd_setup_mode_config(struct drm_device *dev);
-
 static int compare_dev(struct device *dev, void *data)
 {
 	return dev->of_node == data;
@@ -60,8 +58,8 @@ static int hdlcd_unload(struct drm_device *dev)
 	struct hdlcd_drm_private *hdlcd = dev->dev_private;
 
 	drm_kms_helper_poll_fini(dev);
-	if (hdlcd->fbdev)
-		drm_fbdev_cma_fini(hdlcd->fbdev);
+	if (hdlcd->fb_helper)
+		drm_fb_helper_fini(hdlcd->fb_helper);
 
 	drm_vblank_cleanup(dev);
 	drm_mode_config_cleanup(dev);
@@ -129,7 +127,6 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 		}
 	}
 
-	hdlcd_setup_mode_config(dev);
 	ret = hdlcd_setup_crtc(dev);
 	if (ret < 0) {
 		DRM_ERROR("failed to create crtc\n");
@@ -168,14 +165,9 @@ static int hdlcd_load(struct drm_device *dev, unsigned long flags)
 	
 	init_completion(&hdlcd->frame_completion);
 
-	hdlcd->fbdev = drm_fbdev_cma_init(dev, 32,
-					dev->mode_config.num_crtc,
-					dev->mode_config.num_connector);
-
-	if (IS_ERR(hdlcd->fbdev)) {
+	ret = hdlcd_fbdev_init(dev);
+	if (ret < 0) {
 		DRM_ERROR("failed to initialise fbdev buffer\n");
-		ret = PTR_ERR(hdlcd->fbdev);
-		hdlcd->fbdev = NULL;
 		goto fail;
 	}
 
@@ -187,29 +179,6 @@ fail:
 	return ret;
 }
 
-static void hdlcd_fb_output_poll_changed(struct drm_device *dev)
-{
-	struct hdlcd_drm_private *hdlcd = dev->dev_private;
-	if (hdlcd->fbdev) {
-		drm_fbdev_cma_hotplug_event(hdlcd->fbdev);
-	}
-}
-
-static const struct drm_mode_config_funcs hdlcd_mode_config_funcs = {
-	.fb_create = drm_fb_cma_create,
-	.output_poll_changed = hdlcd_fb_output_poll_changed,
-};
-
-static void hdlcd_setup_mode_config(struct drm_device *dev)
-{
-	drm_mode_config_init(dev);
-	dev->mode_config.min_width = 0;
-	dev->mode_config.min_height = 0;
-	dev->mode_config.max_width = HDLCD_MAX_XRES;
-	dev->mode_config.max_height = HDLCD_MAX_YRES;
-	dev->mode_config.funcs = &hdlcd_mode_config_funcs;
-}
-
 static void hdlcd_preclose(struct drm_device *dev, struct drm_file *file)
 {
 }
@@ -217,7 +186,11 @@ static void hdlcd_preclose(struct drm_device *dev, struct drm_file *file)
 static void hdlcd_lastclose(struct drm_device *dev)
 {
 	struct hdlcd_drm_private *hdlcd = dev->dev_private;
-	drm_fbdev_cma_restore_mode(hdlcd->fbdev);
+
+	drm_modeset_lock_all(dev);
+	if (hdlcd->fb_helper)
+		drm_fb_helper_restore_fbdev_mode_unlocked(hdlcd->fb_helper);
+	drm_modeset_unlock_all(dev);
 }
 
 static irqreturn_t hdlcd_irq(int irq, void *arg)
