@@ -5,11 +5,19 @@
 #ifndef __HDLCD_DRV_H__
 #define __HDLCD_DRV_H__
 
+#include <drm/drm_gem.h>
+
+struct hdlcd_bo {
+	struct drm_gem_object gem;
+	dma_addr_t dma_addr;
+	void *cpu_addr;
+};
+
 struct hdlcd_drm_private {
 	void __iomem			*mmio;
 	struct clk			*clk;
-	struct drm_fbdev_cma		*fbdev;
-	struct drm_framebuffer		*fb;
+	struct drm_fb_helper		*fb_helper;
+	struct hdlcd_bo			*bo;
 	struct drm_pending_vblank_event	*event;
 	struct drm_crtc			crtc;
 	struct completion		frame_completion;
@@ -22,6 +30,7 @@ struct hdlcd_drm_private {
 	int dpms;
 };
 
+#define to_hdlcd_bo_obj(x)	container_of(x, struct hdlcd_bo, gem)
 #define crtc_to_hdlcd_priv(x)	container_of(x, struct hdlcd_drm_private, crtc)
 
 static inline void
@@ -63,6 +72,8 @@ static inline int hdlcd_create_virtual_connector(struct drm_device *dev)
 }
 #endif
 
+void hdlcd_drm_mode_config_init(struct drm_device *dev);
+int hdlcd_fbdev_init(struct drm_device *dev);
 /* common function used by all connectors */
 extern struct drm_encoder *hdlcd_connector_best_encoder(struct drm_connector *con);
 

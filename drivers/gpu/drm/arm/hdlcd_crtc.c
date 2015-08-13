@@ -41,14 +41,14 @@ static void hdlcd_crtc_destroy(struct drm_crtc *crtc)
 void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd, bool wait)
 {
 	struct drm_framebuffer *fb = hdlcd->crtc.primary->fb;
-	struct drm_gem_cma_object *gem;
+	struct hdlcd_bo *bo;
 	unsigned int depth, bpp;
 	dma_addr_t scanout_start;
 
 	drm_fb_get_bpp_depth(fb->pixel_format, &depth, &bpp);
-	gem = drm_fb_cma_get_gem_obj(fb, 0);
+	bo = hdlcd->bo;
 
-	scanout_start = gem->paddr + fb->offsets[0] +
+	scanout_start = bo->dma_addr + fb->offsets[0] +
 		(hdlcd->crtc.y * fb->pitches[0]) + (hdlcd->crtc.x * bpp/8);
 
 	hdlcd_write(hdlcd, HDLCD_REG_FB_BASE, scanout_start);
@@ -285,17 +285,27 @@ int hdlcd_setup_crtc(struct drm_device *dev)
 	struct hdlcd_drm_private *hdlcd = dev->dev_private;
 	int ret;
 
+	drm_mode_config_init(dev);
+	hdlcd_drm_mode_config_init(dev);
+
 	hdlcd->crtc.port = of_graph_get_next_endpoint(dev->platformdev->dev.of_node, NULL);
-	if (!hdlcd->crtc.port)
-		return -ENXIO;
+	if (!hdlcd->crtc.port) {
+		ret = -ENXIO;
+		goto crtc_setup_err;
+	}
 
 	ret = drm_crtc_init(dev, &hdlcd->crtc, &hdlcd_crtc_funcs);
 	if (ret < 0) {
 		of_node_put(hdlcd->crtc.port);
-		return ret;
+		goto crtc_setup_err;
 	}
 
 	drm_crtc_helper_add(&hdlcd->crtc, &hdlcd_crtc_helper_funcs);
 	return 0;
+
+crtc_setup_err:
+	drm_mode_config_cleanup(dev);
+
+	return ret;
 }
 
