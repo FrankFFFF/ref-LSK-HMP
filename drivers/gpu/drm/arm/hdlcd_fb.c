@@ -615,6 +615,9 @@ static struct drm_framebuffer *hdlcd_fb_create(struct drm_device *dev,
 	return hdlcd->fb_helper->fb;
 }
 
+/* Use colour depth that Android user-side is hard-coded to expect */
+static const int preferred_bpp = config_enabled(CONFIG_ARM) ? 16 : 32;
+
 int hdlcd_fbdev_init(struct drm_device *dev)
 {
 	int ret;
@@ -641,7 +644,7 @@ int hdlcd_fbdev_init(struct drm_device *dev)
 	drm_helper_disable_unused_functions(dev);
 
 	/* disable all the possible outputs/crtcs before entering KMS mode */
-	ret = drm_fb_helper_initial_config(hdlcd->fb_helper, 32);
+	ret = drm_fb_helper_initial_config(hdlcd->fb_helper, preferred_bpp);
 	if (ret < 0) {
 		dev_err(dev->dev, "Failed to set initial hw configuration.\n");
 		goto err_helper_fini;
