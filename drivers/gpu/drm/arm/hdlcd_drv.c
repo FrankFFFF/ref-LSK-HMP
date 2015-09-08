@@ -353,6 +353,8 @@ static int hdlcd_drm_bind(struct device *dev)
 	struct drm_device *drm;
 	struct hdlcd_drm_private *hdlcd;
 	int ret;
+	struct device_node *node;
+	int preferred_bpp;
 
 	hdlcd = devm_kzalloc(dev, sizeof(*hdlcd), GFP_KERNEL);
 	if (!hdlcd)
@@ -390,7 +392,15 @@ static int hdlcd_drm_bind(struct device *dev)
 	drm_mode_config_reset(drm);
 	drm_kms_helper_poll_init(drm);
 
-	hdlcd->fbdev = drm_fbdev_cma_init(drm, 32, drm->mode_config.num_crtc,
+	/* Try to pick the colour depth that Android user-side is hard-coded for */
+	preferred_bpp = 16;
+	node = of_find_compatible_node(NULL,NULL,"arm,mali");
+	if (node) {
+		of_node_put(node);
+		preferred_bpp = 32; /* If Mali present, assume 32bpp */
+	}
+
+	hdlcd->fbdev = drm_fbdev_cma_init(drm, preferred_bpp, drm->mode_config.num_crtc,
 					  drm->mode_config.num_connector);
 
 	if (IS_ERR(hdlcd->fbdev)) {
