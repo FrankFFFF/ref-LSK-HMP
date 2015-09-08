@@ -23,7 +23,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_helper.h>
-#include <drm/drm_fb_cma_helper.h>
+#include "hdlcd_fb_helper.h"
 #include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_of.h>
 
@@ -118,7 +118,7 @@ static void hdlcd_fb_output_poll_changed(struct drm_device *drm)
 	struct hdlcd_drm_private *hdlcd = drm->dev_private;
 
 	if (hdlcd->fbdev)
-		drm_fbdev_cma_hotplug_event(hdlcd->fbdev);
+		hdlcd_drm_fbdev_hotplug_event(hdlcd->fbdev);
 }
 
 static int hdlcd_atomic_commit(struct drm_device *dev,
@@ -128,7 +128,7 @@ static int hdlcd_atomic_commit(struct drm_device *dev,
 }
 
 static const struct drm_mode_config_funcs hdlcd_mode_config_funcs = {
-	.fb_create = drm_fb_cma_create,
+	.fb_create = hdlcd_fb_create,
 	.output_poll_changed = hdlcd_fb_output_poll_changed,
 	.atomic_check = drm_atomic_helper_check,
 	.atomic_commit = hdlcd_atomic_commit,
@@ -164,7 +164,7 @@ static void hdlcd_lastclose(struct drm_device *drm)
 {
 	struct hdlcd_drm_private *hdlcd = drm->dev_private;
 
-	drm_fbdev_cma_restore_mode(hdlcd->fbdev);
+	hdlcd_drm_fbdev_restore_mode(hdlcd->fbdev);
 }
 
 static irqreturn_t hdlcd_irq(int irq, void *arg)
@@ -413,7 +413,7 @@ static int hdlcd_drm_bind(struct device *dev)
 	drm_mode_config_reset(drm);
 	drm_kms_helper_poll_init(drm);
 
-	hdlcd->fbdev = drm_fbdev_cma_init(drm, preferred_bpp, drm->mode_config.num_crtc,
+	hdlcd->fbdev = hdlcd_drm_fbdev_init(drm, preferred_bpp, drm->mode_config.num_crtc,
 					  drm->mode_config.num_connector);
 
 	if (IS_ERR(hdlcd->fbdev)) {
@@ -451,7 +451,7 @@ static void hdlcd_drm_unbind(struct device *dev)
 	struct hdlcd_drm_private *hdlcd = drm->dev_private;
 
 	if (hdlcd->fbdev) {
-		drm_fbdev_cma_fini(hdlcd->fbdev);
+		hdlcd_drm_fbdev_fini(hdlcd->fbdev);
 		hdlcd->fbdev = NULL;
 	}
 	drm_kms_helper_poll_fini(drm);
