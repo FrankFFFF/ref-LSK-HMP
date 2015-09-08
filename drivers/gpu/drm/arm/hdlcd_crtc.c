@@ -14,7 +14,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_helper.h>
-#include <drm/drm_fb_cma_helper.h>
+#include "hdlcd_fb_helper.h"
 #include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_of.h>
 #include <drm/drm_plane_helper.h>
@@ -270,7 +270,7 @@ static void hdlcd_plane_atomic_update(struct drm_plane *plane,
 	src_h = plane->state->src_h >> 16;
 	dest_w = plane->state->crtc_w;
 	dest_h = plane->state->crtc_h;
-	gem = drm_fb_cma_get_gem_obj(plane->state->fb, 0);
+	gem = hdlcd_fb_get_gem_obj(plane->state->fb, 0);
 	scanout_start = gem->paddr + plane->state->fb->offsets[0] +
 		plane->state->crtc_y * plane->state->fb->pitches[0] +
 		plane->state->crtc_x * bpp / 8;
