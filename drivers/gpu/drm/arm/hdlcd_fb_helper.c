@@ -590,6 +590,12 @@ static int hdlcd_get_dmabuf_ioctl(struct fb_info *info, unsigned int cmd,
 	if (copy_from_user(&ebuf, argp, sizeof(ebuf)))
 		return -EFAULT;
 
+	/*
+	 * We need a reference on the gem object. This will be released by
+	 * drm_gem_dmabuf_release when the file descriptor is closed.
+	 */
+	drm_gem_object_reference(&obj->base);
+
 	dma_buf = drm_gem_prime_export(helper->dev, &obj->base, ebuf.flags | O_RDWR);
 	if (!dma_buf) {
 		dev_info(info->dev, "Failed to export DMA buffer\n");
@@ -611,6 +617,7 @@ static int hdlcd_get_dmabuf_ioctl(struct fb_info *info, unsigned int cmd,
 err_export_fd:
 	dma_buf_put(dma_buf);
 err_export:
+	drm_gem_object_unreference(&obj->base);
 	return -EFAULT;
 }
 
