@@ -1,0 +1,114 @@
+/*
+ * ARM JUNO specific energy cost model data. There are no unit requirements for
+ * the data. Data can be normalized to any reference point, but the
+ * normalization must be consistent. That is, one bogo-joule/watt must be the
+ * same quantity for all data, but we don't care what it is.
+ */
+
+/* static struct idle_state idle_states_cluster_a53[] = {
+ *	{ .power = 56 },
+ *	{ .power = 17 },
+ * };
+ *
+ * static struct idle_state idle_states_cluster_a57[] = {
+ *	{ .power = 65 },
+ *	{ .power = 24 },
+ * };
+ * 
+ * static struct capacity_state cap_states_cluster_a53[] = {
+ *	{ .cap = 235, .power = 26, },
+ *	{ .cap = 303, .power = 30, },
+ *	{ .cap = 368, .power = 39, },
+ *	{ .cap = 406, .power = 47, },
+ *	{ .cap = 447, .power = 57, },
+ * };
+ *
+ * static struct capacity_state cap_states_cluster_a57[] = {
+ *	{ .cap = 417,  .power = 24, },
+ *	{ .cap = 579,  .power = 32, },
+ *	( .cap = 744,  .power = 43, },
+ *	{ .cap = 883,  .power = 49, },
+ *	{ .cap = 1024, .power = 64, },
+ * };
+ *
+ * static struct idle_state idle_states_core_a53[] = {
+ *	{ .power = 6 },
+ *	{ .power = 0 },
+ * };
+ *
+ * static struct idle_state idle_states_core_a57[] = {
+ *	{ .power = 15 },
+ *	{ .power = 0  },
+ * };
+ * 
+ * static struct capacity_state cap_states_core_a53[] = {
+ *	{ .cap = 235, .power = 33, },
+ *	{ .cap = 302, .power = 46, },
+ *	{ .cap = 368, .power = 61, },
+ *	{ .cap = 406, .power = 76, },
+ *	{ .cap = 447, .power = 93, },
+ * };
+ *
+ * static struct capacity_state cap_states_core_a57[] = {
+ *	{ .cap = 417,  .power = 168, },
+ *	{ .cap = 579,  .power = 251, },
+ *	{ .cap = 744,  .power = 359, },
+ *	{ .cap = 883,  .power = 479, },
+ *	{ .cap = 1024, .power = 616, },
+ * };
+ */
+ 
+energy-costs {
+	CPU_COST_A57: core-cost0 {
+		busy-cost-data = <
+			417   168
+			579   251
+			744   359
+			883   479
+		   1023   616
+		>;
+		idle-cost-data = <
+		      15
+			  0
+		>;
+	};
+	CPU_COST_A53: core-cost1 {
+		busy-cost-data = <
+			235    33
+			302    46
+			368    61
+			406    76
+			447    93
+		>;
+		idle-cost-data = <
+		      6
+			  0
+		>;
+	};
+ 	CLUSTER_COST_A57: cluster-cost0 {
+		busy-cost-data = <
+			417    24
+			579    32
+			744    43
+			883    49
+		   1024    64
+		>;
+		idle-cost-data = <
+			 65
+			 24
+		>;
+	};
+ 	CLUSTER_COST_A53: cluster-cost1 {
+		busy-cost-data = <
+			235    26
+			303    30
+			368    39
+			406    47
+			447    57
+		>;
+		idle-cost-data = <
+			56
+			17
+		>;
+	};
+};
