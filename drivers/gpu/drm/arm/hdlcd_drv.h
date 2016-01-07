@@ -13,6 +13,8 @@ struct hdlcd_drm_private {
 	struct list_head		event_list;
 	struct drm_crtc			crtc;
 	struct drm_plane		*plane;
+	spinlock_t			frame_completion_lock;
+	struct completion		frame_completion;
 #ifdef CONFIG_DEBUG_FS
 	atomic_t buffer_underrun_count;
 	atomic_t bus_error_count;
@@ -38,5 +40,7 @@ int hdlcd_setup_crtc(struct drm_device *dev);
 void hdlcd_set_scanout(struct hdlcd_drm_private *hdlcd);
 void hdlcd_crtc_suspend(struct drm_crtc *crtc);
 void hdlcd_crtc_resume(struct drm_crtc *crtc);
+
+void hdlcd_wait_for_frame_completion(struct drm_device *drm);
 
 #endif /* __HDLCD_DRV_H__ */
