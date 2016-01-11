@@ -26,6 +26,7 @@
 #include <linux/dma-buf.h>
 #include <linux/module.h>
 #include "hdlcd_drv.h"
+#include "hdlcd_regs.h"
 
 #define MAX_FRAMES 2
 
@@ -328,6 +329,32 @@ int hdlcd_fb_debugfs_show(struct seq_file *m, void *arg)
 EXPORT_SYMBOL_GPL(hdlcd_fb_debugfs_show);
 #endif
 
+static int hdlcd_fb_helper_pan_display(struct fb_var_screeninfo *var,
+			      struct fb_info *info)
+{
+	struct drm_fb_helper *helper = info->par;
+	struct drm_framebuffer *fb = helper->fb;
+	struct hdlcd_drm_private *hdlcd = helper->dev->dev_private;
+	unsigned int depth, bpp;
+	struct drm_gem_cma_object *gem;
+	dma_addr_t scanout_start;
+	int ret;
+
+	ret = hdlcd_fb_helper_check_var(var, info);
+	if (ret)
+		return ret;
+
+	drm_fb_get_bpp_depth(fb->pixel_format, &depth, &bpp);
+	gem = hdlcd_fb_get_gem_obj(fb, 0);
+
+	scanout_start = gem->paddr + fb->offsets[0] +
+		(var->yoffset * fb->pitches[0]) + (var->xoffset * bpp/8);
+
+	hdlcd_write(hdlcd, HDLCD_REG_FB_BASE, scanout_start);
+
+	return ret;
+}
+
 static struct fb_ops hdlcd_drm_fbdev_ops = {
 	.owner		= THIS_MODULE,
 	.fb_fillrect	= drm_fb_helper_sys_fillrect,
@@ -336,7 +363,7 @@ static struct fb_ops hdlcd_drm_fbdev_ops = {
 	.fb_check_var	= hdlcd_fb_helper_check_var,
 	.fb_set_par	= drm_fb_helper_set_par,
 	.fb_blank	= drm_fb_helper_blank,
-	.fb_pan_display	= drm_fb_helper_pan_display,
+	.fb_pan_display	= hdlcd_fb_helper_pan_display,
 	.fb_setcmap	= drm_fb_helper_setcmap,
 	.fb_ioctl	= hdlcd_fb_ioctl,
 	.fb_compat_ioctl= hdlcd_fb_ioctl,
