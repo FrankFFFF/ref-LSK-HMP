@@ -3,3 +3,4 @@ dts-dirs += arm
 dts-dirs += cavium
 
 subdir-y	:= $(dts-dirs)
+clean-files	:= *.dtb
