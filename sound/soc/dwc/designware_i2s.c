@@ -147,22 +147,13 @@ static inline void i2s_clear_irqs(struct dw_i2s_dev *dev, u32 stream)
 static void i2s_start(struct dw_i2s_dev *dev,
 		      struct snd_pcm_substream *substream)
 {
-	u32 i, irq;
+
 	i2s_write_reg(dev->i2s_base, IER, 1);
 
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		for (i = 0; i < 4; i++) {
-			irq = i2s_read_reg(dev->i2s_base, IMR(i));
-			i2s_write_reg(dev->i2s_base, IMR(i), irq & ~0x30);
-		}
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		i2s_write_reg(dev->i2s_base, ITER, 1);
-	} else {
-		for (i = 0; i < 4; i++) {
-			irq = i2s_read_reg(dev->i2s_base, IMR(i));
-			i2s_write_reg(dev->i2s_base, IMR(i), irq & ~0x03);
-		}
+	else
 		i2s_write_reg(dev->i2s_base, IRER, 1);
-	}
 
 	i2s_write_reg(dev->i2s_base, CER, 1);
 }
@@ -645,6 +636,8 @@ static int dw_i2s_probe(struct platform_device *pdev)
 
 	dev->dev = &pdev->dev;
 
+	dev->i2s_reg_comp1 = I2S_COMP_PARAM_1;
+	dev->i2s_reg_comp2 = I2S_COMP_PARAM_2;
 	if (pdata) {
 		dev->capability = pdata->cap;
 		clk_id = NULL;
@@ -652,9 +645,6 @@ static int dw_i2s_probe(struct platform_device *pdev)
 		if (dev->quirks & DW_I2S_QUIRK_COMP_REG_OFFSET) {
 			dev->i2s_reg_comp1 = pdata->i2s_reg_comp1;
 			dev->i2s_reg_comp2 = pdata->i2s_reg_comp2;
-		} else {
-			dev->i2s_reg_comp1 = I2S_COMP_PARAM_1;
-			dev->i2s_reg_comp2 = I2S_COMP_PARAM_2;
 		}
 		ret = dw_configure_dai_by_pd(dev, dw_i2s_dai, res, pdata);
 	} else {
