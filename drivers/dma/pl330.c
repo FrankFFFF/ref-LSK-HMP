@@ -2241,7 +2241,7 @@ pl330_tx_status(struct dma_chan *chan, dma_cookie_t cookie,
 	struct dma_pl330_chan *pch = to_pchan(chan);
 	unsigned int transferred, residual = 0;
 
-	ret = dma_cookie_status(chan, cookie, txstate);
+	return dma_cookie_status(chan, cookie, txstate);
 
 	if (!txstate)
 		return ret;
@@ -2894,7 +2894,7 @@ pl330_probe(struct amba_device *adev, const struct amba_id *id)
 	pd->src_addr_widths = PL330_DMA_BUSWIDTHS;
 	pd->dst_addr_widths = PL330_DMA_BUSWIDTHS;
 	pd->directions = BIT(DMA_DEV_TO_MEM) | BIT(DMA_MEM_TO_DEV);
-	pd->residue_granularity = DMA_RESIDUE_GRANULARITY_SEGMENT;
+	pd->residue_granularity = DMA_RESIDUE_GRANULARITY_DESCRIPTOR;
 
 	ret = dma_async_device_register(pd);
 	if (ret) {
