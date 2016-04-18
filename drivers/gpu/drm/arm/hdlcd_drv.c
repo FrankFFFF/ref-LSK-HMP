@@ -23,7 +23,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_helper.h>
-#include <drm/drm_fb_cma_helper.h>
+#include "hdlcd_fb_helper.h"
 #include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_of.h>
 
@@ -69,6 +69,12 @@ static int hdlcd_load(struct drm_device *drm, unsigned long flags)
 		(version & HDLCD_VERSION_MAJOR_MASK) >> 8,
 		version & HDLCD_VERSION_MINOR_MASK);
 
+	/* Make sure hardware is in a safe reset state */
+	hdlcd_write(hdlcd, HDLCD_REG_COMMAND, 0);
+	hdlcd_write(hdlcd, HDLCD_REG_INT_MASK, 0);
+	hdlcd_write(hdlcd, HDLCD_REG_INT_CLEAR,~0);
+	hdlcd_write(hdlcd, HDLCD_REG_INT_RAWSTAT, 0);
+
 	/* Get the optional framebuffer memory resource */
 	ret = of_reserved_mem_device_init(drm->dev);
 	if (ret && ret != -ENODEV)
@@ -94,6 +100,9 @@ static int hdlcd_load(struct drm_device *drm, unsigned long flags)
 		goto irq_fail;
 	}
 
+	spin_lock_init(&hdlcd->frame_completion_lock);
+	init_completion(&hdlcd->frame_completion);
+
 	return 0;
 
 irq_fail:
@@ -109,7 +118,7 @@ static void hdlcd_fb_output_poll_changed(struct drm_device *drm)
 	struct hdlcd_drm_private *hdlcd = drm->dev_private;
 
 	if (hdlcd->fbdev)
-		drm_fbdev_cma_hotplug_event(hdlcd->fbdev);
+		hdlcd_drm_fbdev_hotplug_event(hdlcd->fbdev);
 }
 
 static int hdlcd_atomic_commit(struct drm_device *dev,
@@ -119,7 +128,7 @@ static int hdlcd_atomic_commit(struct drm_device *dev,
 }
 
 static const struct drm_mode_config_funcs hdlcd_mode_config_funcs = {
-	.fb_create = drm_fb_cma_create,
+	.fb_create = hdlcd_fb_create,
 	.output_poll_changed = hdlcd_fb_output_poll_changed,
 	.atomic_check = drm_atomic_helper_check,
 	.atomic_commit = hdlcd_atomic_commit,
@@ -139,7 +148,7 @@ static void hdlcd_lastclose(struct drm_device *drm)
 {
 	struct hdlcd_drm_private *hdlcd = drm->dev_private;
 
-	drm_fbdev_cma_restore_mode(hdlcd->fbdev);
+	hdlcd_drm_fbdev_restore_mode(hdlcd->fbdev);
 }
 
 static irqreturn_t hdlcd_irq(int irq, void *arg)
@@ -147,6 +156,7 @@ static irqreturn_t hdlcd_irq(int irq, void *arg)
 	struct drm_device *drm = arg;
 	struct hdlcd_drm_private *hdlcd = drm->dev_private;
 	unsigned long irq_status;
+	unsigned long flags;
 
 	irq_status = hdlcd_read(hdlcd, HDLCD_REG_INT_STATUS);
 
@@ -166,7 +176,6 @@ static irqreturn_t hdlcd_irq(int irq, void *arg)
 #endif
 	if (irq_status & HDLCD_INTERRUPT_VSYNC) {
 		bool events_sent = false;
-		unsigned long flags;
 		struct drm_pending_vblank_event	*e, *t;
 
 		drm_crtc_handle_vblank(&hdlcd->crtc);
@@ -181,6 +190,16 @@ static irqreturn_t hdlcd_irq(int irq, void *arg)
 			drm_crtc_vblank_put(&hdlcd->crtc);
 		spin_unlock_irqrestore(&drm->event_lock, flags);
 	}
+
+	spin_lock_irqsave(&hdlcd->frame_completion_lock, flags);
+	if (hdlcd_read(hdlcd, HDLCD_REG_INT_STATUS) & HDLCD_INTERRUPT_DMA_END) {
+		/* Clear DMA_END interrupt here, under frame_completion_lock */
+		hdlcd_write(hdlcd, HDLCD_REG_INT_CLEAR, HDLCD_INTERRUPT_DMA_END);
+		irq_status &= ~HDLCD_INTERRUPT_DMA_END;
+		/* Wake up everyone waiting for frame completion */
+		complete_all(&hdlcd->frame_completion);
+	}
+	spin_unlock_irqrestore(&hdlcd->frame_completion_lock, flags);
 
 	/* acknowledge interrupt(s) */
 	hdlcd_write(hdlcd, HDLCD_REG_INT_CLEAR, irq_status);
@@ -198,15 +217,18 @@ static void hdlcd_irq_preinstall(struct drm_device *drm)
 
 static int hdlcd_irq_postinstall(struct drm_device *drm)
 {
-#ifdef CONFIG_DEBUG_FS
 	struct hdlcd_drm_private *hdlcd = drm->dev_private;
 	unsigned long irq_mask = hdlcd_read(hdlcd, HDLCD_REG_INT_MASK);
 
+#ifdef CONFIG_DEBUG_FS
 	/* enable debug interrupts */
 	irq_mask |= HDLCD_DEBUG_INT_MASK;
+#endif
+	/* enable DMA completion interrupts */
+	irq_mask |= HDLCD_INTERRUPT_DMA_END;
 
 	hdlcd_write(hdlcd, HDLCD_REG_INT_MASK, irq_mask);
-#endif
+
 	return 0;
 }
 
@@ -221,10 +243,32 @@ static void hdlcd_irq_uninstall(struct drm_device *drm)
 	irq_mask &= ~HDLCD_DEBUG_INT_MASK;
 #endif
 
-	/* disable vsync interrupts */
-	irq_mask &= ~HDLCD_INTERRUPT_VSYNC;
+	/* disable vsync and dma interrupts */
+	irq_mask &= ~(HDLCD_INTERRUPT_VSYNC | HDLCD_INTERRUPT_DMA_END);
 
 	hdlcd_write(hdlcd, HDLCD_REG_INT_MASK, irq_mask);
+}
+
+void hdlcd_wait_for_frame_completion(struct drm_device *drm)
+{
+	struct hdlcd_drm_private *hdlcd = drm->dev_private;
+
+	if (drm_vblank_get(drm, 0))
+		return; /* vblank interrupts not available so don't try and wait */
+
+	/*
+	 * Clear pending interrupts and completions so we won't get signalled
+	 * for any earlier frames,
+	 */
+	spin_lock_irq(&hdlcd->frame_completion_lock);
+	hdlcd_write(hdlcd, HDLCD_REG_INT_CLEAR, HDLCD_INTERRUPT_DMA_END);
+	reinit_completion(&hdlcd->frame_completion);
+	spin_unlock_irq(&hdlcd->frame_completion_lock);
+
+	/* Wait for end of current frame */
+	wait_for_completion_interruptible_timeout(&hdlcd->frame_completion, HZ / 10);
+
+	drm_vblank_put(drm, 0);
 }
 
 static int hdlcd_enable_vblank(struct drm_device *drm, unsigned int crtc)
@@ -347,6 +391,8 @@ static int hdlcd_drm_bind(struct device *dev)
 	struct drm_device *drm;
 	struct hdlcd_drm_private *hdlcd;
 	int ret;
+	struct device_node *node;
+	int preferred_bpp;
 
 	hdlcd = devm_kzalloc(dev, sizeof(*hdlcd), GFP_KERNEL);
 	if (!hdlcd)
@@ -384,7 +430,15 @@ static int hdlcd_drm_bind(struct device *dev)
 	drm_mode_config_reset(drm);
 	drm_kms_helper_poll_init(drm);
 
-	hdlcd->fbdev = drm_fbdev_cma_init(drm, 32, drm->mode_config.num_crtc,
+	/* Try to pick the colour depth that Android user-side is hard-coded for */
+	preferred_bpp = 16;
+	node = of_find_compatible_node(NULL,NULL,"arm,mali");
+	if (node) {
+		of_node_put(node);
+		preferred_bpp = 32; /* If Mali present, assume 32bpp */
+	}
+
+	hdlcd->fbdev = hdlcd_drm_fbdev_init(drm, preferred_bpp, drm->mode_config.num_crtc,
 					  drm->mode_config.num_connector);
 
 	if (IS_ERR(hdlcd->fbdev)) {
@@ -421,7 +475,7 @@ static void hdlcd_drm_unbind(struct device *dev)
 	struct hdlcd_drm_private *hdlcd = drm->dev_private;
 
 	if (hdlcd->fbdev) {
-		drm_fbdev_cma_fini(hdlcd->fbdev);
+		hdlcd_drm_fbdev_fini(hdlcd->fbdev);
 		hdlcd->fbdev = NULL;
 	}
 	drm_kms_helper_poll_fini(drm);
@@ -535,7 +589,19 @@ static struct platform_driver hdlcd_platform_driver = {
 	},
 };
 
-module_platform_driver(hdlcd_platform_driver);
+static int __init hdlcd_init(void)
+{
+	return platform_driver_register(&hdlcd_platform_driver);
+}
+
+static void __exit hdlcd_exit(void)
+{
+	platform_driver_unregister(&hdlcd_platform_driver);
+}
+
+/* need late_initcall() so we load after i2c driver */
+late_initcall(hdlcd_init);
+module_exit(hdlcd_exit);
 
 MODULE_AUTHOR("Liviu Dudau");
 MODULE_DESCRIPTION("ARM HDLCD DRM driver");
