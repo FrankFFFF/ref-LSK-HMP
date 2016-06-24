@@ -239,3 +239,7 @@
 &pcie_ctlr {
 	status = "okay";
 };
+
+&smsc_ethernet {
+	status = "disabled";
+};
