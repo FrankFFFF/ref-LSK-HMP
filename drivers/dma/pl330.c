@@ -2277,6 +2277,7 @@ pl330_tx_status(struct dma_chan *chan, dma_cookie_t cookie,
 	struct dma_pl330_desc *desc, *running = NULL;
 	struct dma_pl330_chan *pch = to_pchan(chan);
 	unsigned int transferred, residual = 0;
+	bool first_busy;
 
 	ret = dma_cookie_status(chan, cookie, txstate);
 
@@ -2290,16 +2291,31 @@ pl330_tx_status(struct dma_chan *chan, dma_cookie_t cookie,
 
 	if (pch->thread->req_running != -1)
 		running = pch->thread->req[pch->thread->req_running].desc;
+	first_busy = true;
 
 	/* Check in pending list */
 	list_for_each_entry(desc, &pch->work_list, node) {
 		if (desc->status == DONE)
 			transferred = desc->bytes_requested;
-		else if (running && desc == running)
-			transferred =
-				pl330_get_current_xferred_count(pch, desc);
-		else
+		else if (desc->status == BUSY && first_busy) {
+			first_busy = false;
+			if (running && desc == running) {
+				transferred =
+					pl330_get_current_xferred_count(pch, desc);
+			} else {
+				/* BUSY but not running means it's just completed */
+				transferred = desc->bytes_requested;
+			}
+		} else {
+			/*
+			 * Descriptor is either in PREP state queued for future
+			 * transfer or it is the second BUSY descriptor we have
+			 * seen. The latter case means it has just, or is about
+			 * to be, started, so treat it as having not yet
+			 * transferred any bytes, the same as PREP.
+			 */
 			transferred = 0;
+		}
 		residual += desc->bytes_requested - transferred;
 		if (desc->txd.cookie == cookie) {
 			switch (desc->status) {
